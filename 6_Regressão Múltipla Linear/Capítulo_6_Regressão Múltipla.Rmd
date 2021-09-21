@@ -1,0 +1,346 @@
+---
+title: "Capítulo 6 - Regressão Múltipla"
+output:
+  html_document: 
+    toc: yes
+    theme: spacelab
+    fig_caption: yes
+    number_sections: yes
+    keep_md: yes
+---
+
+# Cálculo Tamanho da Amostra
+```{r}
+#Instalando a biblioteca (bastar rodar uma única vez retirando o símbolo # da próxima linha)
+#install.packages("WebPower")  
+#Carregando a biblioteca
+require(WebPower)
+#Tamanho de amostra “n” começando em “início" até "término" saltando unidades "saltos"
+início=100; término=800; saltos=10
+n<-seq(início,término,saltos)
+# Nível de significância alfa
+alfa=0.05
+# Tamanho do efeito f2 
+R2completo=0.1 ; R2reduzido=0.05
+f2 <- (R2completo- R2reduzido)/(1-R2completo)
+# Nº de preditores modelo completo (Pcompleto) e reduzido (Preduzido)
+Pcompleto=6; Preduzido=3
+res<-wp.regression(n, Pcompleto, Preduzido, f2, alfa)
+# Gráfico “n” poder do teste
+plot(res)
+```
+
+
+# Simulação dos Dados
+```{r}
+#Define uma semente fixa para todos processos de aleatorização tornando o exemplo reproduzivél
+set.seed(123) 
+
+#Define n como o tamanho da amostra a ser considerada na simulação
+n <- 600
+```
+
+##  Variáveis Independentes (Exógenas)
+```{r}
+# Distribuições de probabilidade são utilizadas nesta simulação para definir as variáveis independentes de acordo com sua de sua distribuição natureza e nível de mensuração
+
+# Exemplo - QI Inteligência tende a ter uma distribuição normal na população com média igual a 100 (m=100) e desvio padrão igual a 15 (dp=15)
+
+#Adotando QI como a variável X1 podemos simulá-la utilizando a função rnorm(n,m,dp) que gera um n valores aletórios que seguem uma distribuição normal com média igual a m e desvio padrão igual a dp 
+
+#Ex. X1<- rnorm(n,m=100,sd=14) # o valor de n já foi definido acima
+
+# Contínuas com Distribuição normal
+# Parâmetros n= número de observações (tamanho da amostra), m= média e dp= desvio padrão. A função round(x,digtis=0) arredonda os valores para o número de digitos definido em digtis=
+
+X1<- round(rnorm(n,m=100,sd=14),1)     #VI - Inteligência
+X2<- round(rnorm(n=n,m=20,sd=4),1)     #VI - Motivação
+X3<- round(rnorm(n=n,m=10,sd=2),1)     #VI - Ansiedade
+
+# Contagens com Distribuição Poisson
+# Parâmetros n= número de observações (tamanho da amostra) e lambda= equivalente a m=dp em uma distribuição normal que caracteriza uma distribuição Poisson
+
+# Número de recursos percebidos como úteis 
+X4<- rpois(n=n,lambda=10)       #VI - N recursos utilizados (equivale a m=10 e dp=10)
+
+# Variável Moderadora 
+
+# Distribuição binomial indicando probabilidade de ocorrência de um "sucesso" como modelo para variáveis dicotômicas
+#  . 
+W<-rbinom(n, 1, 0.5) # W - Desing instrucional Personalizado da Plataforma  Personalizado=1  vs. Padrão = 0
+
+# Variáveis Controle
+
+C1<- round(rnorm(n, 70,10),1)      # Índice de Rendimento Acadêmico (Semestre Anterior)
+C2<- round(rnorm(n, 22,2),0)       # Idade em anos
+C3<- rbinom(n, 1, 0.4)             # Proporção por Sexo 1=Feminino 0=Masculino
+C4<- rbinom(n, 2, 0.2)             # Porporção de que Trabalho/Estágio 2=Estudante; 1=Estágio; 0=Atividade Remunerada;
+```
+
+##Variáveis Mediadoras (Endógenas)
+```{r}
+#Neste caso variáveis mediadoras definidas pelas VIs e moderadas por W e X3
+
+#M ~ X1 + X2 + X3 + X4  + (1 + X1 + X2 + X3 + X4)*W + erro
+
+# Modelo M1 - Atitudes Positivas EAD
+
+a1.1 =  .4 # Inteligência (efeito de X1 on M1)
+a1.2 =  .8 # Motivação (efeito de X2 on M1)
+a1.3 = -.5 # Ansiedade (efeito X3 on M1)
+
+a1.13 = 0.2 # Interação Inteleigênica vs Ansiedade
+a1.23 = 0.2 # Interação Motivação vs Ansiedade
+
+a1.4 =  .3 # Recursos (efeito de X4 on M1)
+a1.5 =  .2 # Design Instrucional (efeito de X5 on M1)
+a1.6 =  .01 # Design x Inteligência (Mod efeito de X1 on M1)
+a1.7 =  .5 # Design x  Motivação (Mod efeito de X2 on M1)
+a1.8 = -.6 # Design x  Ansiedade (Mod efeito X3 on M1)
+a1.9 =  .2 # Design x Recursos (Mod efeito de X4 on M1)
+
+# Erro aleatório do modelo 
+erro_a1 = rnorm(n, 0,1)
+
+# Modelo da variável mediadora M1 - representando 
+M1 <- a1.1*scale(X1) + a1.2*scale(X2) + a1.3*scale(X3) + a1.4*scale(X4) + a1.5*W + a1.6*scale(X1)*W + a1.7*scale(X2)*W + a1.8*scale(X3)*W+ a1.9*scale(X4)*W + scale(erro_a1) + a1.13*scale(X1)*scale(X3)  + a1.23*scale(X2)*scale(X3)
+
+# Arredondamento 
+M1 <-round(M1,1)
+# Retornando para a escala anterior
+M1 <-round(M1*sd(M1)+25,1)
+#summary(M1)
+#hist((M1))
+M1<-as.numeric(M1)
+
+# Modelo M2 - Resolução de Problemas 
+
+a2.1 =  .8 # Inteligência (efeito de X1 on M1)
+a2.2 =  .2 # Motivação (efeito de X2 on M1)
+a2.3 = -.3 # Ansiedade (efeito X3 on M1)
+
+a2.13 = 0.5 # Interação Inteleigênica vs Ansiedade
+a2.23 = 0.5 # Interação Motivação vs Ansiedade
+
+a2.4 =  .6 # Recursos (efeito de X4 on M1)
+a2.5 =  .3 # Design Instrucional (efeito de X5 on M1)
+a2.6 =  .1 # Design x Inteligência (Mod efeito de X1 on M1)
+a2.7 =  .1 # Design x  Motivação (Mod efeito de X2 on M1)
+a2.8 = -.1 # Design x  Ansiedade (Mod efeito X3 on M1)
+a2.9 =  .2 # Design x Recursos (Mod efeito de X4 on M1)
+
+# Erro aleatório do modelo 
+erro_a2 = rnorm(n, 0,1)
+
+# Modelo da variável mediadora M1 - representando 
+M2 <- a2.1*scale(X1) + a2.2*scale(X2) + a2.3*scale(X3) + a2.4*scale(X4) + a2.5*W + a2.6*scale(X1)*W + a2.7*scale(X2)*W + a2.8*scale(X3)*W+ a2.9*scale(X4)*W + a2.13*scale(X1)*scale(X3)  + a2.23*scale(X2)*scale(X3) + scale(erro_a2) 
+
+# Retornando para a escala anterior
+M2 <-round((M2*sd(M2))+50,1)
+#summary(M2)
+#hist((M2))
+#M2<-as.numeric(M2)
+```
+
+## Variável Dependente (Endógena)
+```{r}
+# O modelo para a variável dependente considera que esta é definida pelas variáveis dependentes, variáveis mediadoras, variáveis de controle e influência da moderadora
+
+#Efeitos Diretos com Moderação de X3 (Ansiedade)
+cdash1 = .6 
+cdash2 = .5 
+cdash3 = -.5  
+cdash4 =  .3  
+cdash13 =  0.3
+cdash23 =  0.3
+
+#Trajetórias b (M on Y) - com moderação de W e X3
+b1 = .6 
+b2 = .7 
+b1x3=-0.3
+b2x3=-0.4
+b1w=-0.5
+b2w=-0.5
+
+#Moderações de W em C
+ct1 = .6
+ct2 = .2
+ct3 = .2
+ct4 = -.4
+
+# Controles 
+
+cw =   0.5
+cw3 = -0.4
+cw2 =  0.3
+cw1 =  0.3
+cw =   0.5
+
+#Modelo Variável Dependente
+Y = (cdash1*scale(X1) + cdash2*scale(X2) + cdash3*scale(X3) + cdash4*scale(X4) 
+    + cdash13*scale(X1)*scale(X3) 
+    + cdash23*scale(X2)*scale(X3) 
+    + b1*scale(M1) + b2*scale(M2) 
+    + b1x3*scale(M1)*scale(X3) + b2x3*scale(M2)*scale(X3) 
+    + b1w*scale(M1)*W + b2w*scale(M2)*W
+    + cw*W + cw1*scale(X1)*W + cw2*scale(X2)*W + cw3*scale(X3)*W 
+    + ct1*scale(C1) + ct2*scale(C2) + ct3*C3 + ct4*C4 
+    + scale(rnorm(n,0,3)))
+
+Y<-round(Y,1)
+Y<-round(1.5*Y*sd(Y)+rnorm(n,60,2),1)
+
+#hist(Y)
+#summary(Y)
+Y<-as.numeric(Y)
+```
+
+# Criação do Banco de Dados .csv
+```{r}
+# Padroniza as variávies para análise de moderação 
+Yscale <-scale(Y)
+X1scale<-scale(X1)
+X2scale<-scale(X2)
+X3scale<-scale(X3)
+X4scale<-scale(X4)
+C1scale<-scale(C1)
+C2scale<-scale(C2)
+M1scale<-scale(M1)
+M2scale<-scale(M2)
+
+#Criando Banco de dados
+data<-cbind(Y,X1,X2,X3,X4,C1,C2,C3,C4,W,M1,M2,Yscale,X1scale,X2scale,X3scale,X4scale,C1scale,C2scale,M1scale,M2scale)
+data<-as.data.frame(data)
+
+# Nomeando Variáveis Categóricas
+data$W<-factor(as.factor(data$W),c(0,1),labels=c("Padrão", "Personalizado"))
+data$C3<-factor(as.factor(data$C3),c(0,1),labels=c("Masculino", "Feminino"))
+data$C4<-factor(as.factor(data$C4),c(0,1,2),labels=c("Ativ.Remunerada", "Estágio","Estudante"))
+
+# Adicionando Rótulo de Variáveis
+names(data)<-c("Rendimento Escolar", "Inteligência","Motivação","Ansiedade","Número de Recursos","Índice Acadêmico","Idade","Sexo","Trabalha Atualmente","Design Instrucional","Atitude Postiva EAD","Resolução de Problemas","Rendimento EscolarZ", "InteligênciaZ","MotivaçãoZ","AnsiedadeZ","Número de Recursos","Índice AcadêmicoZ","IdadeZ","Atitude Postiva EADZ","Resolução de ProblemasZ")
+
+# Organizando ordem das variáveis
+data<-data[,c("Rendimento Escolar", "Inteligência","Motivação","Ansiedade","Idade","Sexo","Trabalha Atualmente","Design Instrucional","Atitude Postiva EAD","Resolução de Problemas","Rendimento EscolarZ", "InteligênciaZ","MotivaçãoZ","AnsiedadeZ","Número de Recursos","Índice AcadêmicoZ","IdadeZ","Atitude Postiva EADZ","Resolução de ProblemasZ","Número de Recursos","Índice Acadêmico")]
+
+#Salvando Arquivo Jamovi
+write.csv(data, "data.csv",fileEncoding="utf-8")
+```
+
+# Estatísticas Descritivas Variável Desfecho 
+```{r}
+#install.packages("jmv")
+library(jmv)
+jmv::descriptives(
+    data = data,
+    vars = vars('Rendimento Escolar'),
+    hist = TRUE,
+    dens = TRUE,
+    box = TRUE,
+    violin = TRUE,
+    dot = TRUE,
+    qq = TRUE,
+    sd = TRUE,
+    skew = TRUE,
+    kurt = TRUE,
+    sw = TRUE)
+```
+
+# Análise de Regressão Múltipla
+```{r}
+jmv::linReg(
+    data = data,
+    dep = 'Rendimento Escolar',
+    covs = vars(Motivação, Ansiedade),
+    blocks = list(
+        list(
+            "Ansiedade",
+            "Motivação")),
+    refLevels = list(),
+    r2Adj = TRUE,
+    modelTest = TRUE,
+    anova = TRUE,
+    ci = TRUE,
+    stdEst = TRUE,
+    ciStdEst = TRUE,
+    norm = TRUE,
+    qqPlot = TRUE,
+    resPlots = TRUE,
+    durbin = TRUE,
+    collin = TRUE,
+    cooks = TRUE,
+    emMeans = ~ Ansiedade + Motivação,
+    emmTables = TRUE)
+```
+
+
+# Análise Regressão Múltipla Hierárquica com Moderação
+```{r}
+jmv::linReg(
+    data = data,
+    dep = 'Rendimento Escolar',
+    covs = vars(Idade, Motivação, Inteligência, Ansiedade),
+    factors = Sexo,
+    blocks = list(
+        list(
+            "Idade",
+            "Sexo",
+            "Inteligência"),
+        list(
+            "Ansiedade",
+            "Motivação"),
+        list(
+            c("Motivação", "Ansiedade"))),
+    refLevels = list(
+        list(
+            var="Sexo",
+            ref="Feminino")),
+    r2Adj = TRUE,
+    modelTest = TRUE,
+    anova = TRUE,
+    ci = TRUE,
+    stdEst = TRUE,
+    ciStdEst = TRUE,
+    norm = TRUE,
+    qqPlot = TRUE,
+    resPlots = TRUE,
+    durbin = TRUE,
+    collin = TRUE,
+    cooks = TRUE,
+    emMeans = ~ Ansiedade + Motivação + Ansiedade:Motivação,
+    emmTables = TRUE)
+```
+
+# Análise Moderação com Bootstrap 
+
+```{r}
+medmod::mod(
+    data = data,
+    dep = 'Rendimento Escolar',
+    mod = 'Motivação',
+    pred = 'Ansiedade',
+    estMethod = "bootstrap",
+    ci = TRUE,
+    simpleSlopeEst = TRUE,
+    simpleSlopePlot = TRUE)
+```
+
+# Modelo de Mediação Simples
+
+```{r}
+medmod::med(
+    data = data,
+    dep = 'Rendimento Escolar',
+    med = 'Atitude Postiva EAD',
+    pred = 'Ansiedade',
+    estMethod = "bootstrap",
+    ci = TRUE,
+    pm = TRUE,
+    paths = TRUE,
+    label = TRUE,
+    estPlot = TRUE)
+```
+
+
+
+
