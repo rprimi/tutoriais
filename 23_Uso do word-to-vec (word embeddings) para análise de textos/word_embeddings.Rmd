@@ -1,0 +1,286 @@
+---
+title: "Cqp. 23. Uso do _word-to-vec_ (_word embeddings_) para análise de textos"
+author: "Ricardo Primi"
+date: "`r Sys.Date()`"
+output:
+  prettydoc::html_pretty:
+    theme: architect
+    highlight: vignette
+---
+
+### Bibliotecas
+
+```{r setup}
+
+library(tidyverse)
+library(tidytext)
+library(readxl)
+library(purrr)
+library(knitr)
+```
+
+```{r analysis-preferences}
+# Seed for random number generation
+set.seed(42)
+knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+```
+
+### Dados
+
+```{r }
+ 
+ con<-url("http://www.labape.com.br/rprimi/r/bfi.rds")
+ bfi <- readRDS(con)
+ bfi <-tibble(bfi)
+ 
+ 
+```
+
+### Tokenizando
+
+```{r }
+
+ bfi2  <- bfi %>% 
+   select(CodItem, seman_pairs, domain, facet, pole, item_text_pt) %>%
+   unnest_tokens(output=words, input=item_text_pt, token="words")
+
+```
+
+```{r }
+ dim(bfi2)
+ bfi2  %>% count(words, sort = TRUE)
+```
+
+
+### Removendo stopwords
+ 
+```{r e}
+ 
+ stopwords <- read_csv(
+    file = "http://www.labape.com.br/rprimi/ds/stopwords.txt", 
+    col_names = "words")
+ 
+ bfi2  <- bfi2 %>% anti_join(stopwords)
+
+ bfi2 <- bfi2 %>% anti_join(
+   tibble( words =  c("posso", "sobre", "tudo", "gosto", "sou",
+   "costumo", "facilidade", "meio", "faço",  "fico", "demais", 
+     "dificilmente", "muitos", "pessoas")
+     )
+   )     
+
+```
+
+```{r }
+ bfi2 %>% count(words, sort = TRUE)
+```
+
+
+### Vetores 
+
+http://www.nilc.icmc.usp.br/nilc/index.php/repositorio-de-word-embeddings-do-nilc#
+
+
+```{r echo=TRUE, eval=FALSE}
+
+  library(readr)
+  nilc_wv <- read_delim(
+    file = "glove_s300.txt", 
+    delim = " ",quote="", 
+    skip = 1,  
+    col_names = FALSE, 
+    progress = TRUE)
+  
+  names(nilc_wv)[1]<-"words"
+  names(nilc_wv)[2:301]<-paste("d", 1:300, sep= "")
+
+  bfi2 <- bfi2 %>% left_join(nilc_wv, by="words")
+ 
+```
+
+
+```{r}
+
+ con<-url("http://www.labape.com.br/rprimi/r/bfi2.rds")
+ bfi3 <- readRDS(con)
+ bfi3 <-tibble(bfi3)
+
+ 
+  bfi3 <- bfi3[ , c(1, 7:306)] %>% 
+      group_by(CodItem) %>%
+      summarise_all(funs(mean), na.rm = TRUE)
+
+```
+
+### t-sne
+
+```{r echo=TRUE}
+  library(Rtsne)
+      set.seed(44)
+    tsne_out <- Rtsne(bfi3[ , 2:301], perplexity = 13)
+  
+```
+
+### Visualizando embeddigns
+
+```{r echo=TRUE}
+  library(ggthemes)
+  library(RColorBrewer)
+  library(ggrepel)
+
+   bind_cols( bfi3, 
+      x = tsne_out$Y[, 1],
+      y = tsne_out$Y[, 2]
+      ) %>% 
+    select(c(1, 302, 303)) %>% 
+    right_join(bfi[, 1:11], by = "CodItem") %>%
+    mutate(fator = factor(domain, levels =c("O", "C", "E", "A", "N"))) %>%
+    ggplot(bfi, mapping = aes(
+             y = y,
+             x = x,
+             color = fator
+       ) 
+     ) +
+    geom_point()  +
+    geom_text_repel(
+            aes(label=CodItem), 
+            size=2.5, vjust=-.2
+            ) 
+  
+```
+
+
+```{r echo=TRUE}
+
+bfi %>% filter(CodItem %in% c("bfi_15", "bfi_26", "bfi_40")) %>%
+  select(CodItem, domain, item_text_pt)
+```
+
+
+```{r echo=TRUE}
+
+bfi %>% filter(CodItem %in% c("bfi_35", "bfi_03", "bfi_28")) %>%
+  select(CodItem, domain, item_text_pt)
+
+``` 
+
+```{r echo=TRUE}
+bfi %>% filter(CodItem %in% c("bfi_18", "bfi_23", "bfi_36", "bfi_31")) %>%
+  select(CodItem, domain, item_text_pt)
+```
+
+
+```{r echo=TRUE}
+ 
+  
+ con<-url("http://www.labape.com.br/rprimi/r/bfi2.rds")
+ bfi3 <- readRDS(con)
+ bfi3 <-tibble(bfi3)
+ 
+
+  bfi3b <- bfi3 %>% select(6:306) %>% 
+    group_by(words) %>%
+   summarize_all(.funs = mean) 
+ 
+  set.seed(44)
+  library(Rtsne)
+  tsne_out2 <- Rtsne(bfi3b[ , 2:301], perplexity = 13)
+  
+  
+  bfi3b <-  bind_cols( 
+    bfi3b,
+    x = tsne_out2$Y[, 1],
+    y = tsne_out2$Y[, 2]
+  )
+  
+```
+
+
+```{r echo=TRUE}
+
+left_join( bfi2, bfi3b[ , c(1, 302, 303)], by = "words") %>% 
+    mutate(fator = factor(domain, levels =c("O", "C", "E", "A", "N"))) %>%
+    ggplot(bfi, mapping = aes(
+             y = y,
+             x = x,
+             color = fator,
+          shape = fator
+       ) 
+     ) +
+    geom_point()  +
+    geom_text_repel(
+            aes(label=words), 
+            size=2.5, vjust=-.2
+            )
+  
+  
+```
+
+
+```{r echo=FALSE}
+
+left_join( bfi2, bfi3b[ , c(1, 302, 303)], by = "words") %>% 
+    mutate(fator = factor(domain, levels =c("O", "C", "E", "A", "N"))) %>%
+    ggplot(bfi, mapping = aes(
+             y = y,
+             x = x,
+             color = fator
+       ) 
+     ) +
+    geom_point()  +
+    geom_text_repel(
+            aes(label=words), 
+            size=2.5, vjust=-.2
+            ) + facet_wrap(.~domain)
+
+```
+### Bert Embeddigns (Bertimbau)
+
+@inproceedings{souza2020bertimbau,
+  author    = {F{\'a}bio Souza and
+               Rodrigo Nogueira and
+               Roberto Lotufo},
+  title     = {{BERT}imbau: pretrained {BERT} models for {B}razilian {P}ortuguese},
+  booktitle = {9th Brazilian Conference on Intelligent Systems, {BRACIS}, Rio Grande do Sul, Brazil, October 20-23 (to appear)},
+  year      = {2020}
+}
+
+```{r}
+
+
+library(text)
+
+bfi5 <- bfi %>% select(item_text_pt) %>% 
+  textEmbed(model = "neuralmind/bert-base-portuguese-cased") 
+
+bfi5 <- bfi %>% select(words) %>% textEmbed(model = "neuralmind/bert-base-portuguese-cased") 
+
+
+ bfi <-  bfi %>% bind_cols(bfi5$item_text_pt) 
+ 
+ names(bfi)
+
+  tsne_out <- Rtsne(bfi[ , 12:1547], perplexity = 13)
+  
+
+   bind_cols( bfi, 
+      x = tsne_out$Y[, 1],
+      y = tsne_out$Y[, 2]
+      ) %>% 
+    mutate(fator = factor(domain, levels =c("O", "C", "E", "A", "N"))) %>%
+    ggplot(bfi, mapping = aes(
+             y = y,
+             x = x,
+             color = fator
+       ) 
+     ) +
+    geom_point()  +
+    geom_text_repel(
+            aes(label=CodItem), 
+            size=2.5, vjust=-.2
+            ) 
+  
+
+
+```
+
