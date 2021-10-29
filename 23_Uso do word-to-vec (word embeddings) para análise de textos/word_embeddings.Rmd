@@ -20,9 +20,11 @@ library(knitr)
 ```
 
 ```{r analysis-preferences}
+
 # Seed for random number generation
 set.seed(42)
 knitr::opts_chunk$set(cache.extra = knitr::rand_seed)
+
 ```
 
 ### Dados
@@ -234,8 +236,13 @@ left_join( bfi2, bfi3b[ , c(1, 302, 303)], by = "words") %>%
             ) + facet_wrap(.~domain)
 
 ```
-### Bert Embeddigns (Bertimbau)
+### Bidirectional Encodings Representations from Transformers (BERT) em portugues (Bertimbau) 
 
+* Essa parte é um plus. Não está descrita no capítulo pois foi elaborada depois da data de publicação do livro.
+* Uso aqui um pacote em r (text) que permite extrair embeddings do BERT um modelo mais atual 
+considerado "ëstado da arte"  para NLP da google
+
+https://github.com/neuralmind-ai/portuguese-bert
 @inproceedings{souza2020bertimbau,
   author    = {F{\'a}bio Souza and
                Rodrigo Nogueira and
@@ -245,29 +252,68 @@ left_join( bfi2, bfi3b[ , c(1, 302, 303)], by = "words") %>%
   year      = {2020}
 }
 
+* Extrai os embeddings
+
+* embeddings2 extrai os embedings médio das palavras do item.
+* embedidngs1: extrai o token especial [CLS] que representa o item totol (a sentença)
+
+
 ```{r}
 
 
-library(text)
-
-bfi5 <- bfi %>% select(item_text_pt) %>% 
-  textEmbed(model = "neuralmind/bert-base-portuguese-cased") 
-
-bfi5 <- bfi %>% select(words) %>% textEmbed(model = "neuralmind/bert-base-portuguese-cased") 
-
-
- bfi <-  bfi %>% bind_cols(bfi5$item_text_pt) 
+  library(text)
+  
+  embeddings1 <- bfi %>% select(item_text_pt) %>% 
+    textEmbed(model = "neuralmind/bert-base-portuguese-cased") 
+  
+  embeddings2 <- bfi %>% select(item_text_pt) %>% 
+    textEmbedLayersOutput(
+      layer = 11:12,
+      model = "neuralmind/bert-base-portuguese-cased"
+      ) 
  
- names(bfi)
+   
 
-  tsne_out <- Rtsne(bfi[ , 12:1547], perplexity = 13)
+```
+
+* Explora objetos
+
+```{r}
+ embeddings1$item_text_pt
+ embeddings1$singlewords_we
+
+ embeddings2$context$item_text_pt
+ embeddings2$decontext$single_we
+ embeddings2$decontext$single_words
+  
+```
+
+* Reestrura embeddings
+- A token especial [CLS] so tem um embeding no layer 12
+```{r}
+
+  embeddings2 <- bind_rows(embeddings2$context$item_text_pt, .id = "item")
+  embedding_cls <- embeddings2 %>% filter(tokens == "[CLS]", layer_number ==12)
+  
+```
+
+### Análise com embeddings provenientes da token especial [CLS]
+```{r}
+ 
+
+ bfi <-  bfi[ , 1:11] %>% bind_cols( embeddings1$item_text_pt) 
+ names(bfi)
+ tsne_out <- Rtsne(bfi[ , 12:1547], perplexity =13)
   
 
    bind_cols( bfi, 
       x = tsne_out$Y[, 1],
       y = tsne_out$Y[, 2]
       ) %>% 
-    mutate(fator = factor(domain, levels =c("O", "C", "E", "A", "N"))) %>%
+    mutate(
+      fator = factor(domain, levels =c("O", "C", "E", "A", "N")),
+      item_text_pt = str_wrap(item_text_pt, 23)
+      ) %>%
     ggplot(bfi, mapping = aes(
              y = y,
              x = x,
@@ -276,7 +322,7 @@ bfi5 <- bfi %>% select(words) %>% textEmbed(model = "neuralmind/bert-base-portug
      ) +
     geom_point()  +
     geom_text_repel(
-            aes(label=CodItem), 
+            aes(label=item_text_pt), 
             size=2.5, vjust=-.2
             ) 
   
@@ -284,3 +330,37 @@ bfi5 <- bfi %>% select(words) %>% textEmbed(model = "neuralmind/bert-base-portug
 
 ```
 
+
+
+### Análise com a média dos embeddings das palavras 
+```{r}
+
+
+ bfi <-  bfi[ , 1:11] %>% bind_cols(embedding_cls) 
+ 
+ tsne_out <- Rtsne(bfi[ , 16:783], perplexity =8)
+  
+
+   bind_cols( bfi, 
+      x = tsne_out$Y[, 1],
+      y = tsne_out$Y[, 2]
+      ) %>% 
+    mutate(
+      fator = factor(domain, levels =c("O", "C", "E", "A", "N")),
+      item_text_pt = str_wrap(item_text_pt, 23)
+      ) %>%
+    ggplot(bfi, mapping = aes(
+             y = y,
+             x = x,
+             color = fator
+       ) 
+     ) +
+    geom_point()  +
+    geom_text_repel(
+            aes(label=item_text_pt), 
+            size=2.5, vjust=-.2
+            ) 
+  
+
+
+```
